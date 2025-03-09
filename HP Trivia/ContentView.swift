@@ -5,82 +5,172 @@
 //  Created by Kerem Serinkan on 9.03.2025.
 //
 
+import AVKit
 import SwiftUI
-import CoreData
 
 struct ContentView: View {
-    @Environment(\.managedObjectContext) private var viewContext
-
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Item.timestamp, ascending: true)],
-        animation: .default)
-    private var items: FetchedResults<Item>
-
+    @State private var audioPlayer: AVAudioPlayer!
+    @State private var scalePlayButton = false
+    @State private var moveBackgroundImage = false
+    @State private var animateViewsIn = false
+    @State private var showInstructions = false
+    @State private var showSettings = false
+    @State private var playGame = false
     var body: some View {
-        NavigationView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp!, formatter: itemFormatter)")
-                    } label: {
-                        Text(item.timestamp!, formatter: itemFormatter)
+        GeometryReader { geo in
+            ZStack {
+                Image("hogwarts")
+                    .resizable()
+                    .frame(width: geo.size.width * 3, height: geo.size.height)
+                    .padding(.top, 3)
+                    .offset(
+                        x: moveBackgroundImage
+                            ? geo.size.width / 1.1 : -geo.size.width / 1.1
+                    )
+                    .onAppear {
+                        withAnimation(.linear(duration: 60).repeatForever()) {
+                            moveBackgroundImage.toggle()
+                        }
                     }
-                }
-                .onDelete(perform: deleteItems)
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
+                VStack {
+                    VStack {
+                        if animateViewsIn {
+                            VStack {
+                                Image(systemName: "bolt.fill")
+                                    .font(.largeTitle)
+                                    .imageScale(.large)
+
+                                Text("HP")
+                                    .font(.custom(Constants.hpFont, size: 70))
+                                    .padding(.bottom, -50)
+                                Text("Trivia")
+                                    .font(.custom(Constants.hpFont, size: 60))
+                            }
+                            .padding(.top, 70)
+                            .transition(.move(edge: .top))
+                        }
                     }
+                    .animation(
+                        .easeOut(duration: 0.7).delay(2), value: animateViewsIn)
+
+                    Spacer()
+                    VStack {
+                        if animateViewsIn {
+                            VStack {
+                                Text("Recent Scores")
+                                    .font(.title2)
+                                Text("33")
+                                Text("20")
+                                Text("31")
+                            }
+                            .font(.title3)
+                            .padding(.horizontal)
+                            .foregroundColor(.white)
+                            .background(.black.opacity(0.7))
+                            .cornerRadius(15)
+                            .transition(.opacity)
+                        }
+                    }
+                    .animation(.linear(duration: 1).delay(4), value: animateViewsIn)
+                    Spacer()
+
+                    HStack {
+                        Spacer()
+                        VStack {
+                            if animateViewsIn {
+                                Button {
+                                    showInstructions.toggle()
+                                } label: {
+                                    Image(systemName: "info.circle.fill")
+                                        .font(.largeTitle)
+                                        .foregroundColor(.white)
+                                        .shadow(radius: 5)
+                                }
+                                .transition(.offset(x: -geo.size.width/4))
+                                .sheet(isPresented: $showInstructions){
+                                    Instructions()
+                                }
+                            }
+                        }
+                        .animation(
+                            .easeOut(duration: 0.7).delay(2.7), value: animateViewsIn)
+                        Spacer()
+                        VStack {
+                            if animateViewsIn {
+                                Button {
+                                    playGame.toggle()
+                                } label: {
+                                    Text("Play")
+                                        .font(.largeTitle)
+                                        .foregroundColor(.white)
+                                        .padding(.vertical, 7)
+                                        .padding(.horizontal, 50)
+                                        .background(.brown)
+                                        .cornerRadius(7)
+                                        .shadow(radius: 5)
+                                }
+                                .scaleEffect(scalePlayButton ? 1.2 : 1)
+                                .onAppear {
+                                    withAnimation(
+                                        .easeInOut(duration: 1.3).repeatForever()
+                                    ) {
+                                        scalePlayButton.toggle()
+                                    }
+                                }
+                                .transition(.offset(y: geo.size.height/3))
+                                .fullScreenCover(isPresented: $playGame){
+                                    Gameplay()
+                                }
+                            }
+                        }
+                        .animation(
+                            .easeOut(duration: 0.7).delay(2), value: animateViewsIn)
+                        
+                        Spacer()
+                        VStack {
+                            if animateViewsIn {
+                                Button {
+                                    showSettings.toggle()
+                                } label: {
+                                    Image(systemName: "gearshape.fill")
+                                        .font(.largeTitle)
+                                        .foregroundColor(.white)
+                                        .shadow(radius: 5)
+                                }
+                                .transition(.offset(x: geo.size.width/4))
+                                .sheet(isPresented: $showSettings){
+                                    Settings()
+                                }
+                            }
+                        }
+                        .animation(
+                            .easeOut(duration: 0.7).delay(2.7), value: animateViewsIn)
+                        Spacer()
+                    }
+                    .frame(width: geo.size.width)
+
+                    Spacer()
                 }
             }
-            Text("Select an item")
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .ignoresSafeArea()
+        .onAppear {
+            animateViewsIn = true
+            //playAudio()
         }
     }
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(context: viewContext)
-            newItem.timestamp = Date()
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-            }
-        }
+    private func playAudio() {
+        let sound = Bundle.main.path(
+            forResource: "magic-in-the-air", ofType: "mp3")
+        audioPlayer = try! AVAudioPlayer(contentsOf: URL(filePath: sound!))
+        audioPlayer.numberOfLoops = -1
+        audioPlayer.play()
     }
 
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            offsets.map { items[$0] }.forEach(viewContext.delete)
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-            }
-        }
-    }
 }
 
-private let itemFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .short
-    formatter.timeStyle = .medium
-    return formatter
-}()
-
 #Preview {
-    ContentView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+    ContentView()
 }
